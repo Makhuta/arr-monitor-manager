@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Sonarr/Radarr Monitor{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-5 mb-3">
+                <i class="fas fa-tv me-3"></i>
+                Sonarr/Radarr Monitor Dashboard
+            </h1>
+            <p class="lead text-muted">
+                Manage your Sonarr and Radarr instances with automated quality-based unmonitoring.
+            </p>
+        </div>
+    </div>
+
+    <!-- Add New Configuration Form -->
+    <div class="row mb-5">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-plus me-2"></i>
+                        Add New Configuration
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('add_config') }}">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="name" class="form-label">Configuration Name *</label>
+                                <input type="text" class="form-control" id="name" name="name" required 
+                                       placeholder="e.g., Main Sonarr Server">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="service_type" class="form-label">Service Type *</label>
+                                <select class="form-select" id="service_type" name="service_type" required>
+                                    <option value="">Select service type</option>
+                                    <option value="sonarr">Sonarr</option>
+                                    <option value="radarr">Radarr</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="ip_address" class="form-label">IP Address/URL *</label>
+                                <input type="text" class="form-control" id="ip_address" name="ip_address" required 
+                                       placeholder="e.g., 192.168.1.100:8989">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="api_token" class="form-label">API Token *</label>
+                                <input type="text" class="form-control" id="api_token" name="api_token" required 
+                                       placeholder="Your API token from Sonarr/Radarr">
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="quality_score" class="form-label">Quality Score Threshold</label>
+                                <input type="number" class="form-control" id="quality_score" name="quality_score" 
+                                       placeholder="e.g., 100 (optional)">
+                                <div class="form-text">Unmonitor when quality score is at or above this value</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="format_name" class="form-label">Format Name Contains</label>
+                                <input type="text" class="form-control" id="format_name" name="format_name" 
+                                       placeholder="e.g., BluRay (optional)">
+                                <div class="form-text">Unmonitor when format name contains this text</div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-plus me-2"></i>
+                                Add Configuration
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Existing Configurations -->
+    <div class="row">
+        <div class="col">
+            <h2 class="h4 mb-3">
+                <i class="fas fa-list me-2"></i>
+                Existing Configurations
+                <span class="badge bg-secondary">{{ configs|length }}</span>
+            </h2>
+            
+            {% if configs %}
+                <div class="row">
+                    {% for config_id, config in configs.items() %}
+                        <div class="col-lg-6 mb-4">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="card-title mb-0">
+                                            <i class="fas fa-{{ 'tv' if config.service_type == 'sonarr' else 'film' }} me-2"></i>
+                                            {{ config.name }}
+                                        </h6>
+                                        <small class="text-muted">{{ config.service_type.title() }}</small>
+                                    </div>
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
+                                                data-bs-toggle="dropdown" aria-expanded="false">
+                                            <i class="fas fa-ellipsis-v"></i>
+                                        </button>
+                                        <ul class="dropdown-menu">
+                                            <li>
+                                                <button class="dropdown-item" type="button" 
+                                                        onclick="regenerateToken('{{ config_id }}')">
+                                                    <i class="fas fa-sync me-2"></i>
+                                                    Regenerate Token
+                                                </button>
+                                            </li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <form method="POST" action="{{ url_for('delete_config', config_id=config_id) }}" 
+                                                      style="display: inline;">
+                                                    <button type="submit" class="dropdown-item text-danger" 
+                                                            onclick="return confirm('Are you sure you want to delete this configuration?')">
+                                                        <i class="fas fa-trash me-2"></i>
+                                                        Delete
+                                                    </button>
+                                                </form>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-12 mb-2">
+                                            <strong>IP Address:</strong> {{ config.ip_address }}
+                                        </div>
+                                        <div class="col-12 mb-2">
+                                            <strong>API Token:</strong> 
+                                            <code class="text-muted">{{ config.api_token[:8] }}...{{ config.api_token[-8:] }}</code>
+                                        </div>
+                                        {% if config.quality_score %}
+                                        <div class="col-12 mb-2">
+                                            <strong>Quality Score:</strong> ≥ {{ config.quality_score }}
+                                        </div>
+                                        {% endif %}
+                                        {% if config.format_name %}
+                                        <div class="col-12 mb-3">
+                                            <strong>Format Contains:</strong> "{{ config.format_name }}"
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <div class="webhook-section">
+                                        <label class="form-label fw-bold">Webhook Token:</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control font-monospace" 
+                                                   id="token-{{ config_id }}" value="{{ config.webhook_token }}" readonly>
+                                            <button class="btn btn-outline-secondary" type="button" 
+                                                    onclick="copyToClipboard('token-{{ config_id }}')">
+                                                <i class="fas fa-copy"></i>
+                                            </button>
+                                        </div>
+                                        <div class="form-text mt-2">
+                                            <strong>Webhook URL:</strong><br>
+                                            <code>http://YOUR_SERVER_IP:PORT/{{ config.service_type }}</code><br>
+                                            <strong>Header:</strong> <code>X-Webhook-Token: {{ config.webhook_token }}</code>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="card">
+                    <div class="card-body text-center py-5">
+                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No configurations yet</h5>
+                        <p class="text-muted">Add your first Sonarr or Radarr configuration above to get started.</p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Instructions -->
+    <div class="row mt-5">
+        <div class="col">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Setup Instructions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-cog me-2"></i>Configuration Steps:</h6>
+                            <ol>
+                                <li>Add a new configuration above with your Sonarr/Radarr details</li>
+                                <li>Set quality criteria (score threshold or format name)</li>
+                                <li>Copy the generated webhook token</li>
+                                <li>Configure the webhook in your Sonarr/Radarr settings</li>
+                            </ol>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-link me-2"></i>Webhook Setup:</h6>
+                            <ul>
+                                <li><strong>URL:</strong> <code>http://YOUR_SERVER:PORT/sonarr</code> or <code>/radarr</code></li>
+                                <li><strong>Method:</strong> POST</li>
+                                <li><strong>Header:</strong> <code>X-Webhook-Token: [your-token]</code></li>
+                                <li><strong>Trigger:</strong> On Download</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Additional page-specific JavaScript can go here
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips if needed
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

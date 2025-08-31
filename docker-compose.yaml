@@ -1,0 +1,12 @@
+services:
+  media_monitor:
+    image: ghcr.io/makhuta/media-monitor:latest
+    container_name: media_monitor
+    ports:
+      - 8000:8000
+    environment:
+      SESSION_SECRET: "dev-secret-key-change-in-production"
+    volumes:
+      - ./config:/app/config
+      - ./logs:/var/log/supervisor
+    restart: unless-stopped
