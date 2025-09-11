@@ -122,6 +122,14 @@
                                             </li>
                                             <li><hr class="dropdown-divider"></li>
                                             <li>
+                                                <button class="dropdown-item" type="button" 
+                                                        onclick="forceUnmonitor('{{ config_id }}')">
+                                                    <i class="fas fa-display me-2"></i>
+                                                    Force unmonitor
+                                                </button>
+                                            </li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
                                                 <form method="POST" action="{{ url_for('delete_config', config_id=config_id) }}" 
                                                       style="display: inline;">
                                                     <button type="submit" class="dropdown-item text-danger" 

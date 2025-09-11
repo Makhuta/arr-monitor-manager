@@ -72,6 +72,43 @@ function regenerateToken(configId) {
     });
 }
 
+
+function forceUnmonitor(configId) {
+    if (!confirm('Are you sure you want to force unmonitor media?')) {
+        return;
+    }
+    
+    // Show loading state
+    const button = event.target.closest('.dropdown-item');
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Force updating...';
+    button.disabled = true;
+    
+    fetch(`/force_unmonitor/${encodeURIComponent(configId)}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Media force updated successfully!', 'success');
+        } else {
+            showToast('Failed to force update media: ' + (data.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error force updating media:', error);
+        showToast('Failed to force update media', 'error');
+    })
+    .finally(() => {
+        // Restore button state
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
 /**
  * Show toast notification
  * @param {string} message - Message to display

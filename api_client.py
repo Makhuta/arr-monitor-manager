@@ -108,6 +108,36 @@ class SonarrRadarrClient:
         except Exception as e:
             logger.error(f'Error unmonitoring episode {episode_id}: {str(e)}')
             return False
+        
+    def unmonitor_episodes(self, episode_ids: list[int]) -> bool:
+        """Unmonitor a specific episode in Sonarr"""
+        if self.service_type != 'sonarr':
+            logger.error('unmonitor_episode called on non-Sonarr client')
+            return False
+        if len(episode_ids) == 0:
+            logger.error('There are no episodes')
+            return False
+        if not isinstance(episode_ids, list):
+            logger.error('episode_ids is not list')
+            return False
+        
+        try:
+            episodes = {
+                "episodeIds": episode_ids,
+                "monitored": False
+            }
+            result = self._make_request('PUT', f'episode/monitor', episodes)
+            
+            if result:
+                logger.info(f'Successfully unmonitored Sonarr episodes {len(episode_ids)}')
+                return True
+            else:
+                logger.error(f'Failed to unmonitor Sonarr episodes {len(episode_ids)}')
+                return False
+                
+        except Exception as e:
+            logger.error(f'Error unmonitoring episodes {len(episode_ids)}: {str(e)}')
+            return False
     
     def unmonitor_movie(self, movie_id: int) -> bool:
         """Unmonitor a specific movie in Radarr"""
@@ -138,14 +168,21 @@ class SonarrRadarrClient:
             logger.error(f'Error unmonitoring movie {movie_id}: {str(e)}')
             return False
     
-    def get_episodes(self, series_id: Optional[int] = None) -> Optional[list]:
+    def get_episodes(self, series_id: Optional[int] = None, custom_headers: list[str] = []) -> Optional[list]:
         """Get episodes from Sonarr"""
         if self.service_type != 'sonarr':
             return None
         
         endpoint = 'episode'
+        q_added = False
         if series_id:
             endpoint += f'?seriesId={series_id}'
+            q_added = True
+
+        for custom_header in custom_headers:
+            endpoint += f"{'&' if q_added else '?'}{custom_header}"
+            if not q_added:
+                q_added = True
         
         result = self._make_request('GET', endpoint)
         if isinstance(result, list):
@@ -159,6 +196,18 @@ class SonarrRadarrClient:
         
         result = self._make_request('GET', 'movie')
         if isinstance(result, list):
+            return result
+        return None
+    
+    def get_movie_file(self, movie_id: int = None) -> Optional[dict]:
+        """Get movies from Radarr"""
+        if self.service_type != 'radarr':
+            return None
+        if movie_id is None:
+            return None
+        
+        result = self._make_request('GET', f'moviefile/{movie_id}')
+        if isinstance(result, dict):
             return result
         return None
     

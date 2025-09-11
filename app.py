@@ -111,6 +111,37 @@ def regenerate_token(config_name):
         logger.error(f'Error regenerating token: {str(e)}')
         flash(f'Error regenerating token: {str(e)}', 'error')
         return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/force_unmonitor/<config_name>', methods=['POST'])
+def force_unmonitor(config_name):
+    """Regenerate webhook token for a configuration"""
+    try:
+        config = config_manager.get_config(config_name)
+        if config:
+            service_type = config.get("service_type")
+            if service_type == "sonarr":
+                result = process_sonarr_force_unmonitor(config)
+                if result:
+                    return jsonify({'success': True})
+                else:
+                    return jsonify({'success': False, 'error': 'Processing failed'})
+            elif service_type == "radarr":
+                result = process_radarr_force_unmonitor(config)
+                if result:
+                    return jsonify({'success': True})
+                else:
+                    return jsonify({'success': False, 'error': 'Processing failed'})
+            else:
+                flash(f'Unknown service type "{service_type}"', 'error')
+                return jsonify({'success': False, 'error': f'Unknown service type "{service_type}"'})
+            logger.info(config)
+        else:
+            flash(f'Configuration "{config_name}" not found.', 'error')
+            return jsonify({'success': False, 'error': 'Configuration not found'})
+    except Exception as e:
+        logger.error(f'Error force unmonitoring: {str(e)}')
+        flash(f'Error force unmonitoring: {str(e)}', 'error')
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/sonarr', methods=['POST'])
 def sonarr_webhook():
@@ -185,6 +216,102 @@ def radarr_webhook():
     except Exception as e:
         logger.error(f'Error processing Radarr webhook: {str(e)}')
         return 'Internal Server Error', 500
+
+def process_sonarr_force_unmonitor(config):
+    try:
+        client = SonarrRadarrClient(config['ip_address'], config['api_token'], 'sonarr')
+        to_unmonitor = []
+        for serie in client.get_series():
+            serie_id = serie.get("id")
+            if serie_id is None:
+                continue
+            for episode in client.get_episodes(serie_id, custom_headers=["includeEpisodeFile=true"]):
+                episode_id = episode.get("id")
+                if episode_id is None:
+                    continue
+                episode_monitored = episode.get("monitored", False)
+                if not episode_monitored:
+                    continue
+                episode_has_file = episode.get("hasFile", False)
+                if not episode_has_file:
+                    continue
+
+                episodeFile = episode.get("episodeFile", {})
+                quality_score = episodeFile.get('customFormatScore', 0)
+                format_name = [cf["name"] for cf in episodeFile.get('customFormats', []) if cf.get("name")]
+                
+                # Check if quality criteria is met
+                should_unmonitor = False
+                
+                if config.get('quality_score') is not None:
+                    if quality_score >= config['quality_score']:
+                        should_unmonitor = True
+                        logger.info(f'Quality score {quality_score} meets requirement {config["quality_score"]}')
+                
+                if config.get('format_name') and format_name:
+                    for custom_format in format_name:
+                        if config['format_name'].lower() in custom_format.lower():
+                            should_unmonitor = True
+                            logger.info(f'Format name "{custom_format}" matches requirement "{config["format_name"]}"')
+                            break
+                if should_unmonitor:
+                    to_unmonitor.append(episode_id)
+
+        if len(to_unmonitor) > 0:
+            return client.unmonitor_episodes(to_unmonitor)
+        return True
+        
+    except Exception as e:
+        logger.error(f'Error processing Sonarr force unmonitor: {str(e)}')
+        return False
+    
+def process_radarr_force_unmonitor(config):
+    try:
+        client = SonarrRadarrClient(config['ip_address'], config['api_token'], 'radarr')
+        for movie in client.get_movies():
+            movie_id = movie.get("id")
+            if movie_id is None:
+                continue
+            movie_file_id = movie.get("movieFileId")
+            if movie_file_id is None:
+                continue
+            if not movie.get("monitored", False):
+                continue
+            movie_file = client.get_movie_file(movie_file_id)
+            if movie_file is None:
+                continue
+
+
+            quality_score = movie_file.get('customFormatScore', 0)
+            format_name = [cf["name"] for cf in movie_file.get('customFormats', []) if cf.get("name")]
+            
+            # Check if quality criteria is met
+            should_unmonitor = False
+            
+            if config.get('quality_score') is not None:
+                if quality_score >= config['quality_score']:
+                    should_unmonitor = True
+                    logger.info(f'Quality score {quality_score} meets requirement {config["quality_score"]}')
+            
+            if config.get('format_name') and format_name:
+                for custom_format in format_name:
+                    if config['format_name'].lower() in custom_format.lower():
+                        should_unmonitor = True
+                        logger.info(f'Format name "{custom_format}" matches requirement "{config["format_name"]}"')
+                        break
+            if should_unmonitor:
+                success = client.unmonitor_movie(movie_id)
+                if success:
+                    logger.info(f'Successfully unmonitored Radarr movie ID: {movie_id}')
+                else:
+                    logger.error(f'Failed to unmonitor Radarr movie ID: {movie_id}')
+
+
+        return True
+        
+    except Exception as e:
+        logger.error(f'Error processing Radarr force unmonitor: {str(e)}')
+        return False
 
 def process_sonarr_webhook(config, webhook_data):
     """Process Sonarr webhook and unmonitor episodes if criteria met"""
